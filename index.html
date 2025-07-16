@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng dụng Dịch thuật Trung-Việt | Youdao API</title>
+    <!-- Sử dụng Tailwind CSS để làm đẹp giao diện -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Thư viện CryptoJS để tạo mã băm SHA256 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .textarea-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        @media (min-width: 768px) {
+            .textarea-container {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl bg-white rounded-xl shadow-lg p-6 md:p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Dịch thuật Trung - Việt</h1>
+            <p class="text-gray-500 mt-2">Sử dụng API từ Youdao (有道智云)</p>
+        </div>
+
+        <!-- Vùng nhập liệu và kết quả -->
+        <div class="textarea-container mb-4">
+            <div>
+                <label for="inputText" class="block mb-2 font-semibold text-gray-700">Văn bản tiếng Trung (中文)</label>
+                <textarea id="inputText" rows="8" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="请输入要翻译的中文文本..."></textarea>
+            </div>
+            <div>
+                <label for="outputText" class="block mb-2 font-semibold text-gray-700">Bản dịch tiếng Việt (越南语)</label>
+                <textarea id="outputText" rows="8" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none" readonly placeholder="Kết quả dịch sẽ hiển thị ở đây..."></textarea>
+            </div>
+        </div>
+
+        <!-- Nút dịch và trạng thái -->
+        <div class="flex flex-col md:flex-row items-center justify-between">
+            <button id="translateBtn" class="w-full md:w-auto bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-transform transform hover:scale-105 mb-4 md:mb-0">
+                Dịch ngay
+            </button>
+            <p id="status" class="text-sm text-gray-600 h-5"></p>
+        </div>
+
+        <!-- Hướng dẫn và thông tin API -->
+        <div class="mt-6 pt-6 border-t border-gray-200 text-xs text-gray-500">
+            <p><strong>Lưu ý:</strong> Bạn cần thay thế `YOUR_APP_KEY` và `YOUR_APP_SECRET` trong mã nguồn bằng ID và Khóa ứng dụng của bạn từ <a href="https://ai.youdao.com" target="_blank" class="text-blue-500 hover:underline">Youdao AI</a>.</p>
+            <p class="mt-2">Ứng dụng này thực hiện cuộc gọi API trực tiếp từ trình duyệt. Nếu gặp lỗi CORS, bạn cần thiết lập một máy chủ trung gian (backend proxy) để xử lý yêu cầu API một cách an toàn.</p>
+        </div>
+    </div>
+
+    <script>
+        // --- CẤU HÌNH API ---
+        // !!! QUAN TRỌNG: Thay thế bằng key và secret của bạn !!!
+        const APP_KEY = 'YOUR_APP_KEY'; // Thay bằng ID Ứng dụng của bạn
+        const APP_SECRET = 'YOUR_APP_SECRET'; // Thay bằng Khóa Ứng dụng của bạn
+        
+        // --- Lấy các phần tử DOM ---
+        const translateBtn = document.getElementById('translateBtn');
+        const inputText = document.getElementById('inputText');
+        const outputText = document.getElementById('outputText');
+        const statusEl = document.getElementById('status');
+
+        // --- Hàm tiện ích ---
+        /**
+         * Hàm truncate theo yêu cầu của Youdao API
+         * Cắt ngắn văn bản nếu quá dài để tạo chữ ký
+         */
+        function truncate(q) {
+            const len = q.length;
+            if (len <= 20) return q;
+            return q.substring(0, 10) + len + q.substring(len - 10, len);
+        }
+
+        // --- Hàm dịch chính ---
+        async function translateText() {
+            const query = inputText.value.trim();
+            if (!query) {
+                statusEl.textContent = 'Vui lòng nhập văn bản cần dịch.';
+                return;
+            }
+            
+            if (APP_KEY === 'YOUR_APP_KEY' || APP_SECRET === 'YOUR_APP_SECRET') {
+                statusEl.textContent = 'Lỗi: Vui lòng cấu hình APP_KEY và APP_SECRET.';
+                return;
+            }
+
+            statusEl.textContent = 'Đang dịch...';
+            outputText.value = '';
+            translateBtn.disabled = true;
+            translateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            // Chuẩn bị các tham số cho API
+            const salt = crypto.randomUUID();
+            const curtime = Math.round(new Date().getTime() / 1000);
+            const from = 'zh-CHS'; // Mã ngôn ngữ tiếng Trung giản thể
+            const to = 'vi';     // Mã ngôn ngữ tiếng Việt
+            
+            // Tạo chuỗi để băm
+            const signStr = APP_KEY + truncate(query) + salt + curtime + APP_SECRET;
+            
+            // Băm chuỗi bằng SHA256
+            const sign = CryptoJS.SHA256(signStr).toString(CryptoJS.enc.Hex);
+
+            // Xây dựng các tham số URL
+            const params = new URLSearchParams();
+            params.append('q', query);
+            params.append('from', from);
+            params.append('to', to);
+            params.append('appKey', APP_KEY);
+            params.append('salt', salt);
+            params.append('sign', sign);
+            params.append('signType', 'v3');
+            params.append('curtime', curtime);
+
+            try {
+                // Gửi yêu cầu đến API của Youdao
+                const response = await fetch('https://openapi.youdao.com/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: params
+                });
+
+                const data = await response.json();
+
+                // Xử lý kết quả trả về
+                if (data.errorCode === "0") {
+                    if (data.translation && data.translation.length > 0) {
+                        outputText.value = data.translation.join('\n');
+                        statusEl.textContent = 'Dịch thành công!';
+                    } else {
+                        statusEl.textContent = 'Lỗi: Không tìm thấy bản dịch.';
+                    }
+                } else {
+                    // Hiển thị lỗi từ API
+                    console.error('API Error:', data);
+                    statusEl.textContent = `Lỗi API: ${data.errorCode}. Xem console để biết chi tiết.`;
+                    outputText.value = `Mã lỗi: ${data.errorCode}\nKiểm tra lại App Key, App Secret và các tham số.`;
+                }
+
+            } catch (error) {
+                // Xử lý lỗi mạng hoặc lỗi CORS
+                console.error('Fetch Error:', error);
+                statusEl.textContent = 'Lỗi kết nối hoặc CORS. Hãy kiểm tra console.';
+                outputText.value = 'Không thể kết nối đến API. Điều này có thể do lỗi mạng hoặc chính sách CORS của trình duyệt. Cân nhắc sử dụng một máy chủ trung gian (backend proxy).';
+            } finally {
+                // Kích hoạt lại nút bấm
+                translateBtn.disabled = false;
+                translateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // --- Gắn sự kiện ---
+        translateBtn.addEventListener('click', translateText);
+    </script>
+
+</body>
+</html>
