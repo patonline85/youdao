@@ -1,4 +1,4 @@
-// index.js - Backend Server
+// index.js - Backend Server (với chức năng gỡ lỗi)
 
 // --- Import các thư viện cần thiết ---
 const express = require('express');
@@ -9,25 +9,19 @@ const path = require('path');
 
 // --- CẤU HÌNH ---
 const app = express();
-// Render cung cấp biến môi trường PORT. Nếu không có, dùng cổng 3000 cho local.
-const PORT = process.env.PORT || 3000; 
+const PORT = process.env.PORT || 3000;
 
-// !!! QUAN TRỌNG: Thay thế bằng key của bạn !!!
-// Để bảo mật hơn khi deploy, bạn nên dùng biến môi trường trên Render
-// thay vì viết thẳng vào code.
 const APP_KEY = process.env.YOUDAO_APP_KEY || 'YOUR_APP_KEY';
 const APP_SECRET = process.env.YOUDAO_APP_SECRET || 'YOUR_APP_SECRET';
 
 // --- Middleware ---
-app.use(cors()); // Cho phép yêu cầu từ các nguồn khác
-app.use(express.json()); // Cho phép server đọc dữ liệu JSON
+app.use(cors());
+app.use(express.json());
 
-// Phục vụ file index.html khi truy cập vào trang chủ
 app.use(express.static(path.join(__dirname)));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-
 
 // --- Hàm tiện ích của Youdao ---
 function truncate(q) {
@@ -45,6 +39,18 @@ app.post('/api/translate', async (req, res) => {
             return res.status(400).json({ error: 'Vui lòng cung cấp văn bản cần dịch.' });
         }
         
+        // --- BẮT ĐẦU GỠ LỖI ---
+        console.log("\n--- Bắt đầu phiên gỡ lỗi dịch thuật ---");
+        console.log(`Thời gian: ${new Date().toISOString()}`);
+        console.log(`Đã nhận được văn bản: "${query}"`);
+
+        // In ra các biến môi trường để kiểm tra (che một phần cho an toàn)
+        const maskedAppKey = APP_KEY.substring(0, 4) + '...' + APP_KEY.slice(-4);
+        const maskedAppSecret = APP_SECRET.substring(0, 4) + '...' + APP_SECRET.slice(-4);
+        console.log(`APP_KEY đang dùng: ${maskedAppKey} (Độ dài: ${APP_KEY.length})`);
+        console.log(`APP_SECRET đang dùng: ${maskedAppSecret} (Độ dài: ${APP_SECRET.length})`);
+        // --- KẾT THÚC GỠ LỖI ---
+
         if (APP_KEY === 'YOUR_APP_KEY' || APP_SECRET === 'YOUR_APP_SECRET') {
              return res.status(500).json({ error: 'Lỗi: APP_KEY và APP_SECRET chưa được cấu hình trên server.' });
         }
