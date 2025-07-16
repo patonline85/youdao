@@ -1,4 +1,4 @@
-// index.js - Backend Server (với chức năng gỡ lỗi)
+// index.js - Backend Server (với chức năng gỡ lỗi nâng cao)
 
 // --- Import các thư viện cần thiết ---
 const express = require('express');
@@ -23,11 +23,13 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- Hàm tiện ích của Youdao ---
+// --- Hàm tiện ích của Youdao (ĐÃ CẬP NHẬT) ---
 function truncate(q) {
-    const len = q.length;
-    if (len <= 20) return q;
-    return q.substring(0, 10) + len + q.substring(len - 10, len);
+    // Loại bỏ các ký tự xuống dòng có thể gây ra lỗi chữ ký
+    const cleanQ = q.replace(/(\r\n|\n|\r)/gm, " ");
+    const len = cleanQ.length;
+    if (len <= 20) return cleanQ;
+    return cleanQ.substring(0, 10) + len + cleanQ.substring(len - 10, len);
 }
 
 // --- API Endpoint cho việc dịch thuật ---
@@ -42,14 +44,11 @@ app.post('/api/translate', async (req, res) => {
         // --- BẮT ĐẦU GỠ LỖI ---
         console.log("\n--- Bắt đầu phiên gỡ lỗi dịch thuật ---");
         console.log(`Thời gian: ${new Date().toISOString()}`);
-        console.log(`Đã nhận được văn bản: "${query}"`);
-
-        // In ra các biến môi trường để kiểm tra (che một phần cho an toàn)
+        
         const maskedAppKey = APP_KEY.substring(0, 4) + '...' + APP_KEY.slice(-4);
         const maskedAppSecret = APP_SECRET.substring(0, 4) + '...' + APP_SECRET.slice(-4);
         console.log(`APP_KEY đang dùng: ${maskedAppKey} (Độ dài: ${APP_KEY.length})`);
         console.log(`APP_SECRET đang dùng: ${maskedAppSecret} (Độ dài: ${APP_SECRET.length})`);
-        // --- KẾT THÚC GỠ LỖI ---
 
         if (APP_KEY === 'YOUR_APP_KEY' || APP_SECRET === 'YOUR_APP_SECRET') {
              return res.status(500).json({ error: 'Lỗi: APP_KEY và APP_SECRET chưa được cấu hình trên server.' });
@@ -60,8 +59,19 @@ app.post('/api/translate', async (req, res) => {
         const from = 'zh-CHS';
         const to = 'vi';
         
-        const signStr = APP_KEY + truncate(query) + salt + curtime + APP_SECRET;
+        const truncatedQuery = truncate(query);
+        const signStr = APP_KEY + truncatedQuery + salt + curtime + APP_SECRET;
         const sign = crypto.createHash('sha256').update(signStr).digest('hex');
+
+        // --- GHI LOG CHI TIẾT HƠN ---
+        console.log("--- Chi tiết tạo chữ ký ---");
+        console.log(`Input (truncated): ${truncatedQuery}`);
+        console.log(`Salt: ${salt}`);
+        console.log(`Curtime: ${curtime}`);
+        console.log(`Chuỗi để băm (signStr): ${signStr}`);
+        console.log(`Chữ ký đã tạo (sign): ${sign}`);
+        console.log("--------------------------");
+        // --- KẾT THÚC GỠ LỖI ---
 
         const params = new URLSearchParams();
         params.append('q', query);
